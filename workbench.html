@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exception Resolution Workbench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0F1419;
+    --surface:#161D24;
+    --surface-2:#1F2830;
+    --surface-3:#293340;
+    --line:#2C3843;
+    --text:#E8EAED;
+    --muted:#8B99A6;
+    --muted-2:#5D6B78;
+    --amber:#E8A33D;
+    --amber-dim:#4A3A1E;
+    --teal:#4FB286;
+    --teal-dim:#1C3A2E;
+    --rose:#E0637A;
+    --rose-dim:#3D2129;
+    --blue:#6FA8DC;
+    --focus:#7EC8E3;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  ::selection{background:var(--amber-dim);color:var(--amber);}
+  :focus-visible{outline:2px solid var(--focus);outline-offset:2px;}
+  button{font-family:inherit;cursor:pointer;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .disp{font-family:'Space Grotesk',sans-serif;}
+
+  /* ===== Shell ===== */
+  #app{display:flex;flex-direction:column;min-height:100vh;}
+  header.topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 24px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#141B21,#0F1419);
+    flex-wrap:wrap;gap:12px;
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .mark{
+    width:30px;height:30px;border-radius:7px;
+    background:conic-gradient(from 220deg,var(--amber),var(--teal),var(--blue),var(--amber));
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Space Grotesk';font-weight:700;font-size:13px;color:#0F1419;
+  }
+  .brand h1{font-family:'Space Grotesk';font-size:16px;font-weight:600;margin:0;letter-spacing:0.2px;}
+  .brand .sub{font-size:11px;color:var(--muted-2);margin-top:1px;letter-spacing:0.3px;text-transform:uppercase;}
+
+  .threshold-control{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 14px;}
+  .threshold-control label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;}
+  .threshold-control input[type=range]{width:110px;accent-color:var(--amber);}
+  .threshold-control .val{font-family:'JetBrains Mono';font-size:13px;color:var(--amber);min-width:38px;}
+
+  .stats{display:flex;gap:10px;padding:14px 24px;flex-wrap:wrap;border-bottom:1px solid var(--line);}
+  .stat{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:12px 18px;min-width:110px;flex:1;
+  }
+  .stat .n{font-family:'Space Grotesk';font-size:24px;font-weight:700;}
+  .stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-top:2px;}
+  .stat.pending .n{color:var(--amber);}
+  .stat.review .n{color:var(--rose);}
+  .stat.resolved .n{color:var(--teal);}
+
+  main{display:flex;flex:1;overflow:hidden;}
+
+  /* ===== Queue ===== */
+  .queue-pane{width:400px;min-width:320px;border-right:1px solid var(--line);display:flex;flex-direction:column;background:var(--bg);}
+  .queue-controls{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;}
+  .chip{
+    background:var(--surface);border:1px solid var(--line);color:var(--muted);
+    padding:6px 12px;border-radius:999px;font-size:12px;font-weight:500;
+    transition:all .15s ease;
+  }
+  .chip.active{background:var(--surface-3);color:var(--text);border-color:var(--muted-2);}
+  .chip:hover{border-color:var(--muted-2);}
+  .search{padding:10px 16px;}
+  .search input{
+    width:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;
+    padding:9px 12px;color:var(--text);font-size:13px;
+  }
+  .queue-list{flex:1;overflow-y:auto;padding:8px;}
+  .qitem{
+    padding:12px 14px;border-radius:9px;margin-bottom:6px;cursor:pointer;
+    border:1px solid transparent;transition:all .12s ease;
+  }
+  .qitem:hover{background:var(--surface);}
+  .qitem.selected{background:var(--surface-2);border-color:var(--muted-2);}
+  .qitem-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+  .qitem-id{font-family:'JetBrains Mono';font-size:12px;color:var(--muted);}
+  .badge{font-size:10px;padding:2px 8px;border-radius:999px;font-weight:600;letter-spacing:0.3px;text-transform:uppercase;}
+  .badge.pending{background:var(--amber-dim);color:var(--amber);}
+  .badge.review{background:var(--rose-dim);color:var(--rose);}
+  .badge.resolved{background:var(--teal-dim);color:var(--teal);}
+  .badge.rejected{background:var(--surface-3);color:var(--muted);}
+  .qitem-vendor{font-size:14px;font-weight:600;color:var(--text);}
+  .qitem-meta{display:flex;justify-content:space-between;margin-top:4px;}
+  .qitem-issue{font-size:11px;color:var(--muted);}
+  .qitem-amt{font-family:'JetBrains Mono';font-size:12px;color:var(--text);}
+  .priority-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;}
+  .priority-dot.HIGH{background:var(--rose);}
+  .priority-dot.MEDIUM{background:var(--amber);}
+  .priority-dot.LOW{background:var(--muted-2);}
+
+  /* ===== Detail ===== */
+  .detail-pane{flex:1;overflow-y:auto;padding:28px 32px;}
+  .empty-state{height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted-2);flex-direction:column;gap:10px;text-align:center;}
+  .empty-state .glyph{font-size:34px;opacity:0.5;}
+
+  .dhead{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;flex-wrap:wrap;gap:12px;}
+  .dhead h2{font-family:'Space Grotesk';font-size:22px;margin:0 0 4px;}
+  .dhead .vendor{color:var(--muted);font-size:14px;}
+
+  .field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px;}
+  .field{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;}
+  .field .k{font-size:10px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted-2);margin-bottom:5px;}
+  .field .v{font-family:'JetBrains Mono';font-size:15px;font-weight:500;}
+  .field.diff .v{color:var(--rose);}
+
+  .issue-banner{
+    background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--amber);
+    border-radius:8px;padding:14px 16px;margin-bottom:22px;font-size:13px;color:var(--muted);line-height:1.5;
+  }
+  .issue-banner b{color:var(--text);}
+
+  .actions{display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;}
+  .btn{
+    padding:10px 18px;border-radius:8px;border:1px solid var(--line);background:var(--surface);
+    color:var(--text);font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;
+    transition:all .12s ease;
+  }
+  .btn:hover:not(:disabled){border-color:var(--muted-2);background:var(--surface-2);}
+  .btn:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn.primary{background:var(--amber);border-color:var(--amber);color:#1A1200;}
+  .btn.primary:hover:not(:disabled){filter:brightness(1.08);}
+  .btn.ghost{background:transparent;}
+  .btn.approve{background:var(--teal);border-color:var(--teal);color:#06231A;}
+  .btn.reject{background:transparent;border-color:var(--rose);color:var(--rose);}
+  .spinner{width:13px;height:13px;border-radius:50%;border:2px solid rgba(255,255,255,0.25);border-top-color:currentColor;animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* AI output blocks */
+  .ai-block{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:18px;}
+  .ai-block .label{font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted-2);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+  .ai-block .label .dot{width:6px;height:6px;border-radius:50%;background:var(--blue);}
+  .ai-block p{font-size:14px;line-height:1.6;margin:0;color:var(--text);}
+
+  /* Confidence gauge - signature element */
+  .gauge-wrap{display:flex;align-items:center;gap:18px;padding:18px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:18px;}
+  .gauge{position:relative;width:96px;height:96px;flex-shrink:0;}
+  .gauge svg{transform:rotate(-90deg);}
+  .gauge .pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono';font-size:18px;font-weight:600;}
+  .gauge-info{flex:1;}
+  .gauge-info .verdict{font-family:'Space Grotesk';font-size:15px;font-weight:600;margin-bottom:4px;}
+  .gauge-info .verdict.auto{color:var(--teal);}
+  .gauge-info .verdict.review{color:var(--rose);}
+  .gauge-info .sub{font-size:12px;color:var(--muted);line-height:1.5;}
+  .evidence-bars{margin-top:10px;display:flex;flex-direction:column;gap:5px;}
+  .ebar-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);}
+  .ebar-row .ebar-label{width:150px;flex-shrink:0;}
+  .ebar-track{flex:1;height:5px;background:var(--surface-3);border-radius:3px;overflow:hidden;}
+  .ebar-fill{height:100%;background:var(--blue);border-radius:3px;}
+  .ebar-val{width:40px;text-align:right;font-family:'JetBrains Mono';}
+
+  /* Audit trail */
+  .audit-title{font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted-2);margin:22px 0 10px;}
+  .audit-log{border-left:2px solid var(--line);padding-left:16px;display:flex;flex-direction:column;gap:16px;}
+  .audit-entry{position:relative;}
+  .audit-entry::before{content:'';position:absolute;left:-20.5px;top:3px;width:9px;height:9px;border-radius:50%;background:var(--surface-3);border:2px solid var(--muted-2);}
+  .audit-entry.ai::before{border-color:var(--blue);}
+  .audit-entry.resolve::before{border-color:var(--teal);background:var(--teal);}
+  .audit-entry.reject::before{border-color:var(--rose);background:var(--rose);}
+  .audit-time{font-family:'JetBrains Mono';font-size:11px;color:var(--muted-2);}
+  .audit-text{font-size:13px;color:var(--text);margin-top:2px;line-height:1.5;}
+
+  /* Chat */
+  .chat-toggle{
+    position:fixed;bottom:22px;right:22px;width:52px;height:52px;border-radius:50%;
+    background:var(--amber);border:none;color:#1A1200;font-size:20px;box-shadow:0 6px 20px rgba(0,0,0,0.4);
+    display:flex;align-items:center;justify-content:center;z-index:50;
+  }
+  .chat-panel{
+    position:fixed;bottom:88px;right:22px;width:360px;max-width:calc(100vw - 32px);height:460px;max-height:calc(100vh - 140px);
+    background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    display:none;flex-direction:column;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.5);z-index:50;
+  }
+  .chat-panel.open{display:flex;}
+  .chat-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;}
+  .chat-head .t{font-family:'Space Grotesk';font-weight:600;font-size:13px;}
+  .chat-head .ctx{font-size:11px;color:var(--muted-2);margin-top:2px;}
+  .chat-close{background:none;border:none;color:var(--muted);font-size:18px;}
+  .chat-msgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;}
+  .msg{max-width:85%;padding:9px 12px;border-radius:10px;font-size:13px;line-height:1.5;}
+  .msg.user{align-self:flex-end;background:var(--amber-dim);color:var(--amber);}
+  .msg.ai{align-self:flex-start;background:var(--surface-3);color:var(--text);}
+  .msg.sys{align-self:center;color:var(--muted-2);font-size:11px;font-style:italic;}
+  .chat-input{display:flex;border-top:1px solid var(--line);padding:10px;gap:8px;}
+  .chat-input input{flex:1;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;}
+  .chat-input button{background:var(--amber);border:none;border-radius:8px;padding:0 14px;color:#1A1200;font-weight:600;font-size:13px;}
+  .chat-input button:disabled{opacity:.4;}
+
+  @media (max-width:760px){
+    main{flex-direction:column;overflow:visible;}
+    .queue-pane{width:100%;border-right:none;border-bottom:1px solid var(--line);max-height:340px;}
+    .detail-pane{padding:20px 16px;}
+    .chat-panel{width:calc(100vw - 24px);right:12px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:0.001ms !important;transition-duration:0.001ms !important;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark">XW</div>
+      <div>
+        <h1>Exception Resolution Workbench</h1>
+        <div class="sub">Human-in-command review</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <button class="chip" id="apiKeyBtn" style="padding:8px 14px;">🔑 <span id="apiKeyStatus">Set API key</span></button>
+      <div class="threshold-control">
+        <label for="thresholdSlider">Auto-resolve threshold</label>
+        <input type="range" id="thresholdSlider" min="0.5" max="0.99" step="0.01" value="0.90">
+        <span class="val mono" id="thresholdVal">90%</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="stats" id="statsRow"></div>
+
+  <main>
+    <div class="queue-pane">
+      <div class="queue-controls" id="filterChips"></div>
+      <div class="search"><input type="text" id="searchBox" placeholder="Search vendor, ID, invoice…"></div>
+      <div class="queue-list" id="queueList"></div>
+    </div>
+    <div class="detail-pane" id="detailPane">
+      <div class="empty-state">
+        <div class="glyph">⌗</div>
+        <div>Select an exception from the queue<br>to investigate and resolve it.</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="apiKeyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:26px;max-width:420px;width:calc(100vw - 40px);">
+    <div class="disp" style="font-size:17px;font-weight:600;margin-bottom:8px;">Anthropic API key</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px;">
+      This app runs entirely in your browser. Your key is stored only in this browser's local storage and is sent directly from your machine to Anthropic — it never passes through any other server. Get a key at
+      <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--blue);">console.anthropic.com/settings/keys</a>.
+    </div>
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-..." style="width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'JetBrains Mono';font-size:13px;margin-bottom:14px;">
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn ghost" id="apiKeyClear">Clear key</button>
+      <button class="btn primary" id="apiKeySave">Save</button>
+    </div>
+  </div>
+</div>
+
+<button class="chat-toggle" id="chatToggle" title="Ask about this exception">💬</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-head">
+    <div>
+      <div class="t">Ask the Workbench</div>
+      <div class="ctx" id="chatCtx">No exception selected</div>
+    </div>
+    <button class="chat-close" id="chatClose">✕</button>
+  </div>
+  <div class="chat-msgs" id="chatMsgs"></div>
+  <div class="chat-input">
+    <input type="text" id="chatInput" placeholder="Why was this flagged?">
+    <button id="chatSend">Send</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const STORAGE_KEY = "workbench-state";
+  const API_KEY_STORAGE = "workbench-api-key";
+  const MODEL = "claude-sonnet-4-5-20250929"; // widely-available direct-API model; change if you have access to a newer one
+
+  function getApiKey(){ return localStorage.getItem(API_KEY_STORAGE) || ""; }
+
+  /* ---------- AI helper — calls Anthropic directly from the browser using YOUR key ---------- */
+  async function callClaude(system, userText, maxTokens){
+    const key = getApiKey();
+    if(!key){
+      openApiKeyModal();
+      throw new Error("No API key set");
+    }
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: maxTokens || 600,
+        system: system,
+        messages: [{ role: "user", content: userText }]
+      })
+    });
+    if(!res.ok){
+      const errBody = await res.json().catch(()=>({}));
+      const msg = (errBody.error && errBody.error.message) || ("HTTP " + res.status);
+      throw new Error(msg);
+    }
+    const data = await res.json();
+    const textBlock = (data.content || []).find(b => b.type === "text");
+    return textBlock ? textBlock.text : "";
+  }
+
+  function extractJSON(text){
+    const cleaned = text.replace(/```json|```/g, "").trim();
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if(start === -1 || end === -1) throw new Error("no json");
+    return JSON.parse(cleaned.slice(start, end+1));
+  }
+
+  /* ---------- Mock data generation ---------- */
+  const VENDORS = ["ABC Supplies","XYZ Corp","PQR Ltd","LMN Traders","Orion Metals","Vertex Chemicals","Bluepeak Logistics","Silverline Textiles","Northgate Industrial","Crescent Foods","Harbor Electronics","Meridian Packaging"];
+  const ISSUE_TYPES = ["PRICE_MISMATCH","QUANTITY_MISMATCH","TAX_MISMATCH","DUPLICATE_INVOICE","MISSING_INFO","AMBIGUOUS"];
+
+  function rnd(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+  function pick(arr){ return arr[rnd(0,arr.length-1)]; }
+
+  function buildTransaction(idx, forceType){
+    const id = "EX-" + String(1000+idx);
+    const vendor = pick(VENDORS);
+    const invNum = "INV-" + rnd(4000,9999);
+    const poNum = "PO-" + rnd(4000,9999);
+    const type = forceType || pick(ISSUE_TYPES);
+    let poAmount = rnd(8,200) * 1000;
+    let invoiceAmount = poAmount;
+    let poQty = rnd(10,500), invQty = poQty;
+    let expectedTax = 18, invoiceTax = 18;
+    let description = "";
+    let priority = "LOW";
+    let missingFields = [];
+    let ambiguousNote = null;
+
+    if(type === "PRICE_MISMATCH"){
+      const pct = rnd(6,25);
+      invoiceAmount = Math.round(poAmount * (1 + pct/100));
+      description = "Invoice amount is " + pct + "% higher than the purchase order amount.";
+      priority = pct > 15 ? "HIGH" : "MEDIUM";
+    } else if(type === "QUANTITY_MISMATCH"){
+      invQty = poQty + pick([-1,1]) * rnd(5,40);
+      description = "Invoiced quantity (" + invQty + ") does not match PO quantity (" + poQty + ").";
+      priority = "MEDIUM";
+    } else if(type === "TAX_MISMATCH"){
+      invoiceTax = pick([12,28,5,0]);
+      description = "Invoice tax rate (" + invoiceTax + "%) differs from expected rate (" + expectedTax + "%).";
+      priority = "LOW";
+    } else if(type === "DUPLICATE_INVOICE"){
+      description = "Invoice number " + invNum + " has already been recorded against a prior payment for this vendor.";
+      priority = "HIGH";
+    } else if(type === "MISSING_INFO"){
+      poNum && (missingFields = ["poNumber"]);
+      description = "This invoice is missing its associated purchase order reference, preventing automated three-way match.";
+      priority = "MEDIUM";
+    } else if(type === "AMBIGUOUS"){
+      invoiceAmount = poAmount + rnd(3,8)*1000;
+      description = "Invoice exceeds PO amount, but a note references a possible approved discount or change order for which supporting documentation has not been located.";
+      ambiguousNote = "Possible approved variance — supporting document missing.";
+      priority = "MEDIUM";
+    }
+
+    return {
+      id, invoiceNumber: invNum,
+      poNumber: type === "MISSING_INFO" ? null : poNum,
+      vendor, issueType: type,
+      invoiceAmount, poAmount,
+      invoiceQty: invQty, poQty: poQty,
+      expectedTax, invoiceTax,
+      difference: invoiceAmount - poAmount,
+      description, priority, ambiguousNote,
+      missingFields,
+      status: "PENDING",
+      confidence: null,
+      evidence: null,
+      aiExplanation: null,
+      aiRecommendation: null,
+      createdAt: new Date(Date.now() - rnd(0,72)*3600*1000).toISOString(),
+      resolvedAt: null,
+      audit: [{
+        time: new Date(Date.now() - rnd(0,72)*3600*1000).toISOString(),
+        type: "create",
+        text: id + " created — " + type.replace(/_/g," ").toLowerCase() + " detected during three-way match."
+      }]
+    };
+  }
+
+  function generateMockData(){
+    const items = [];
+    const forced = ["PRICE_MISMATCH","QUANTITY_MISMATCH","TAX_MISMATCH","DUPLICATE_INVOICE","MISSING_INFO","AMBIGUOUS"];
+    forced.forEach((t,i)=> items.push(buildTransaction(i+1, t)));
+    for(let i=forced.length+1; i<=28; i++){
+      items.push(buildTransaction(i));
+    }
+    return items;
+  }
+
+  /* ---------- Deterministic, transparent confidence engine ---------- */
+  // Evidence-based scoring — never Math.random(). Mirrors the doc's evidence table.
+  function computeConfidence(tx){
+    const factors = [];
+    let score = 0;
+
+    // 1. Exact matching evidence available (both amounts/quantities present & comparable)
+    const hasExactEvidence = tx.invoiceAmount != null && tx.poAmount != null && !!tx.poNumber;
+    const exactPts = hasExactEvidence ? 0.40 : 0.10;
+    factors.push({ label: "Exact matching evidence", pts: exactPts, max: 0.40 });
+    score += exactPts;
+
+    // 2. Clear, single exception type (not ambiguous)
+    const clearType = tx.issueType !== "AMBIGUOUS";
+    const clearPts = clearType ? 0.25 : 0.08;
+    factors.push({ label: "Clear exception type", pts: clearPts, max: 0.25 });
+    score += clearPts;
+
+    // 3. Required fields present
+    const fieldsOk = (!tx.missingFields || tx.missingFields.length === 0);
+    const fieldPts = fieldsOk ? 0.20 : 0.05;
+    factors.push({ label: "Required fields present", pts: fieldPts, max: 0.20 });
+    score += fieldPts;
+
+    // 4. No ambiguity / no unresolved note
+    const noAmbiguity = !tx.ambiguousNote;
+    const ambigPts = noAmbiguity ? 0.15 : 0.02;
+    factors.push({ label: "No unresolved ambiguity", pts: ambigPts, max: 0.15 });
+    score += ambigPts;
+
+    score = Math.max(0, Math.min(1, score));
+    return { score, factors };
+  }
+
+  function defaultAction(tx){
+    switch(tx.issueType){
+      case "PRICE_MISMATCH": return "HOLD_PAYMENT";
+      case "QUANTITY_MISMATCH": return "REQUEST_VENDOR_CLARIFICATION";
+      case "TAX_MISMATCH": return "ADJUST_AND_APPROVE";
+      case "DUPLICATE_INVOICE": return "REJECT_DUPLICATE";
+      case "MISSING_INFO": return "REQUEST_MISSING_PO";
+      case "AMBIGUOUS": return "ESCALATE_FOR_DOCUMENTATION";
+      default: return "REVIEW";
+    }
+  }
+
+  /* ---------- State ---------- */
+  let state = { exceptions: [], threshold: 0.90 };
+  let selectedId = null;
+  let activeFilter = "ALL";
+  let searchTerm = "";
+  async function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        const parsed = JSON.parse(raw);
+        if(parsed && Array.isArray(parsed.exceptions) && parsed.exceptions.length){
+          state = parsed;
+          if(typeof state.threshold !== "number") state.threshold = 0.90;
+          return;
+        }
+      }
+    }catch(e){
+      console.warn("Local storage read failed, starting fresh:", e && e.message);
+    }
+    state = { exceptions: generateMockData(), threshold: 0.90 };
+    saveState();
+  }
+
+  async function saveState(){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }catch(e){
+      console.warn("Local storage save failed (browser storage may be full or disabled):", e && e.message);
+    }
+  }
+
+  function addAudit(tx, type, text){
+    tx.audit.push({ time: new Date().toISOString(), type, text });
+  }
+
+  function fmtINR(n){
+    return "₹" + Number(n).toLocaleString("en-IN");
+  }
+  function fmtTime(iso){
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined,{month:"short",day:"numeric"}) + " · " + d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});
+  }
+  function issueLabel(t){
+    return t.replace(/_/g," ").replace(/\w\S*/g, w => w[0]+w.slice(1).toLowerCase());
+  }
+
+  /* ---------- Rendering ---------- */
+  function statusOf(tx){ return tx.status; } // PENDING | REVIEW | RESOLVED | REJECTED
+
+  function renderStats(){
+    const total = state.exceptions.length;
+    const pending = state.exceptions.filter(t=>t.status==="PENDING").length;
+    const review = state.exceptions.filter(t=>t.status==="REVIEW").length;
+    const resolved = state.exceptions.filter(t=>t.status==="RESOLVED" || t.status==="REJECTED").length;
+    document.getElementById("statsRow").innerHTML = `
+      <div class="stat"><div class="n">${total}</div><div class="l">Total</div></div>
+      <div class="stat pending"><div class="n">${pending}</div><div class="l">Pending</div></div>
+      <div class="stat review"><div class="n">${review}</div><div class="l">In Review</div></div>
+      <div class="stat resolved"><div class="n">${resolved}</div><div class="l">Resolved</div></div>
+    `;
+  }
+
+  function renderFilters(){
+    const filters = [
+      ["ALL","All"], ["PENDING","Pending"], ["REVIEW","In Review"],
+      ["RESOLVED","Resolved"], ["HIGH","High Priority"]
+    ];
+    document.getElementById("filterChips").innerHTML = filters.map(([key,label])=>
+      `<button class="chip ${activeFilter===key?'active':''}" data-filter="${key}">${label}</button>`
+    ).join("");
+    document.querySelectorAll(".chip").forEach(el=>{
+      el.addEventListener("click", ()=>{ activeFilter = el.dataset.filter; renderAll(); });
+    });
+  }
+
+  function filteredList(){
+    return state.exceptions.filter(tx=>{
+      if(activeFilter==="PENDING" && tx.status!=="PENDING") return false;
+      if(activeFilter==="REVIEW" && tx.status!=="REVIEW") return false;
+      if(activeFilter==="RESOLVED" && !(tx.status==="RESOLVED"||tx.status==="REJECTED")) return false;
+      if(activeFilter==="HIGH" && tx.priority!=="HIGH") return false;
+      if(searchTerm){
+        const s = searchTerm.toLowerCase();
+        return tx.vendor.toLowerCase().includes(s) || tx.id.toLowerCase().includes(s) || tx.invoiceNumber.toLowerCase().includes(s);
+      }
+      return true;
+    }).sort((a,b)=> new Date(b.createdAt) - new Date(a.createdAt));
+  }
+
+  function renderQueue(){
+    const list = filteredList();
+    const el = document.getElementById("queueList");
+    if(list.length === 0){
+      el.innerHTML = `<div style="padding:24px;color:var(--muted-2);font-size:13px;text-align:center;">No exceptions match this filter.</div>`;
+      return;
+    }
+    el.innerHTML = list.map(tx=>`
+      <div class="qitem ${tx.id===selectedId?'selected':''}" data-id="${tx.id}">
+        <div class="qitem-top">
+          <span class="qitem-id">${tx.id}</span>
+          <span class="badge ${tx.status.toLowerCase()}">${tx.status}</span>
+        </div>
+        <div class="qitem-vendor"><span class="priority-dot ${tx.priority}"></span>${tx.vendor}</div>
+        <div class="qitem-meta">
+          <span class="qitem-issue">${issueLabel(tx.issueType)}</span>
+          <span class="qitem-amt">${fmtINR(tx.invoiceAmount)}</span>
+        </div>
+      </div>
+    `).join("");
+    el.querySelectorAll(".qitem").forEach(item=>{
+      item.addEventListener("click", ()=>{ selectedId = item.dataset.id; renderAll(); });
+    });
+  }
+
+  function gaugeSVG(pct, colorVar){
+    const r = 40, c = 2*Math.PI*r;
+    const offset = c * (1 - pct);
+    return `<svg width="96" height="96" viewBox="0 0 96 96">
+      <circle cx="48" cy="48" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="8"/>
+      <circle cx="48" cy="48" r="${r}" fill="none" stroke="${colorVar}" stroke-width="8"
+        stroke-dasharray="${c}" stroke-dashoffset="${offset}" stroke-linecap="round"/>
+    </svg>`;
+  }
+
+  function renderDetail(){
+    const pane = document.getElementById("detailPane");
+    const tx = state.exceptions.find(t=>t.id===selectedId);
+    if(!tx){
+      pane.innerHTML = `<div class="empty-state"><div class="glyph">⌗</div><div>Select an exception from the queue<br>to investigate and resolve it.</div></div>`;
+      updateChatContext(null);
+      return;
+    }
+    updateChatContext(tx);
+
+    let fields = `
+      <div class="field"><div class="k">Vendor</div><div class="v">${tx.vendor}</div></div>
+      <div class="field"><div class="k">Invoice</div><div class="v">${tx.invoiceNumber}</div></div>
+      <div class="field"><div class="k">PO</div><div class="v">${tx.poNumber || '— missing —'}</div></div>
+      <div class="field"><div class="k">Invoice Amount</div><div class="v">${fmtINR(tx.invoiceAmount)}</div></div>
+      <div class="field"><div class="k">PO Amount</div><div class="v">${fmtINR(tx.poAmount)}</div></div>
+      <div class="field diff"><div class="k">Difference</div><div class="v">${fmtINR(tx.difference)}</div></div>
+    `;
+    if(tx.issueType === "QUANTITY_MISMATCH"){
+      fields += `<div class="field"><div class="k">Invoice Qty</div><div class="v">${tx.invoiceQty}</div></div>
+                 <div class="field"><div class="k">PO Qty</div><div class="v">${tx.poQty}</div></div>`;
+    }
+    if(tx.issueType === "TAX_MISMATCH"){
+      fields += `<div class="field"><div class="k">Invoice Tax</div><div class="v">${tx.invoiceTax}%</div></div>
+                 <div class="field"><div class="k">Expected Tax</div><div class="v">${tx.expectedTax}%</div></div>`;
+    }
+
+    let gauge = "";
+    if(tx.confidence != null){
+      const pct = Math.round(tx.confidence.score * 100);
+      const autoOk = tx.confidence.score >= state.threshold;
+      const color = autoOk ? "var(--teal)" : "var(--rose)";
+      gauge = `
+        <div class="gauge-wrap">
+          <div class="gauge">${gaugeSVG(tx.confidence.score, color)}<div class="pct" style="color:${color}">${pct}%</div></div>
+          <div class="gauge-info">
+            <div class="verdict ${autoOk?'auto':'review'}">${autoOk ? "High confidence — eligible for auto-resolution" : "Below threshold — human review required"}</div>
+            <div class="sub">Threshold set at ${Math.round(state.threshold*100)}%. Confidence is computed from evidence quality, not estimated by the model.</div>
+            <div class="evidence-bars">
+              ${tx.confidence.factors.map(f=>`
+                <div class="ebar-row">
+                  <span class="ebar-label">${f.label}</span>
+                  <span class="ebar-track"><span class="ebar-fill" style="width:${Math.round(f.pts/f.max*100)}%"></span></span>
+                  <span class="ebar-val">${f.pts.toFixed(2)}</span>
+                </div>`).join("")}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    let aiExplain = tx.aiExplanation ? `
+      <div class="ai-block"><div class="label"><span class="dot"></span>AI Explanation</div><p>${tx.aiExplanation}</p></div>` : "";
+
+    let aiRec = tx.aiRecommendation ? `
+      <div class="ai-block"><div class="label"><span class="dot"></span>Recommended Action</div>
+        <p><b>${issueLabel(tx.aiRecommendation.recommended_action)}</b> — ${tx.aiRecommendation.reason}</p>
+      </div>` : "";
+
+    const canAct = tx.status === "PENDING" || tx.status === "REVIEW";
+    let actions = `
+      <button class="btn ghost" id="btnExplain" ${!canAct?'disabled':''}>Explain</button>
+      <button class="btn primary" id="btnRecommend" ${!canAct?'disabled':''}>Suggest Resolution</button>
+    `;
+    if(tx.status === "REVIEW"){
+      actions += `
+        <button class="btn approve" id="btnApprove">Approve Recommendation</button>
+        <button class="btn reject" id="btnReject">Reject Recommendation</button>
+      `;
+    }
+
+    let auditHTML = tx.audit.slice().reverse().map(a=>`
+      <div class="audit-entry ${a.type}">
+        <div class="audit-time mono">${fmtTime(a.time)}</div>
+        <div class="audit-text">${a.text}</div>
+      </div>
+    `).join("");
+
+    pane.innerHTML = `
+      <div class="dhead">
+        <div>
+          <h2>${tx.id}</h2>
+          <div class="vendor">${tx.vendor} · ${issueLabel(tx.issueType)}</div>
+        </div>
+        <span class="badge ${tx.status.toLowerCase()}" style="font-size:11px;padding:5px 12px;">${tx.status}</span>
+      </div>
+      <div class="field-grid">${fields}</div>
+      <div class="issue-banner"><b>Why flagged:</b> ${tx.description}${tx.ambiguousNote ? `<br><b>Note:</b> ${tx.ambiguousNote}` : ""}</div>
+      ${gauge}
+      ${aiExplain}
+      ${aiRec}
+      <div class="actions">${actions}</div>
+      <div class="audit-title">Audit Trail</div>
+      <div class="audit-log">${auditHTML}</div>
+    `;
+
+    wireDetailActions(tx);
+  }
+
+  function setBtnLoading(id, loadingText){
+    const btn = document.getElementById(id);
+    if(!btn) return;
+    btn.dataset.orig = btn.dataset.orig || btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> ${loadingText}`;
+  }
+  function resetBtn(id){
+    const btn = document.getElementById(id);
+    if(!btn) return;
+    if(btn.dataset.orig) btn.innerHTML = btn.dataset.orig;
+    btn.disabled = false;
+  }
+
+  function wireDetailActions(tx){
+    const explainBtn = document.getElementById("btnExplain");
+    const recBtn = document.getElementById("btnRecommend");
+    const approveBtn = document.getElementById("btnApprove");
+    const rejectBtn = document.getElementById("btnReject");
+
+    if(explainBtn) explainBtn.addEventListener("click", ()=>runExplain(tx));
+    if(recBtn) recBtn.addEventListener("click", ()=>runRecommend(tx));
+    if(approveBtn) approveBtn.addEventListener("click", ()=>resolveDecision(tx, true));
+    if(rejectBtn) rejectBtn.addEventListener("click", ()=>resolveDecision(tx, false));
+  }
+
+  function txContextBlock(tx){
+    return `Exception ID: ${tx.id}
+Vendor: ${tx.vendor}
+Invoice Number: ${tx.invoiceNumber}
+PO Number: ${tx.poNumber || "MISSING"}
+Issue Type: ${tx.issueType}
+Invoice Amount: ₹${tx.invoiceAmount}
+PO Amount: ₹${tx.poAmount}
+Difference: ₹${tx.difference}
+Invoice Qty: ${tx.invoiceQty} | PO Qty: ${tx.poQty}
+Invoice Tax: ${tx.invoiceTax}% | Expected Tax: ${tx.expectedTax}%
+Ambiguous Note: ${tx.ambiguousNote || "none"}
+System description: ${tx.description}`;
+  }
+
+  async function runExplain(tx){
+    setBtnLoading("btnExplain", "Explaining…");
+    try{
+      const system = "You are an AP exceptions assistant. Explain, in 2-3 sentences, exactly why this transaction was flagged, using ONLY the field values given. Reference the specific numbers. Do not invent information or suggest resolutions here — explanation only. Plain text, no markdown.";
+      const answer = await callClaude(system, txContextBlock(tx), 300);
+      tx.aiExplanation = answer.trim();
+      addAudit(tx, "ai", "AI generated explanation for " + tx.id + ".");
+      await saveState();
+      renderAll();
+    }catch(e){
+      if(e.message !== "No API key set"){
+        alert("Couldn't generate an explanation: " + e.message);
+      }
+      resetBtn("btnExplain");
+    }
+  }
+
+  async function runRecommend(tx){
+    setBtnLoading("btnRecommend", "Analyzing…");
+    try{
+      const conf = computeConfidence(tx);
+      tx.confidence = conf;
+
+      const system = `You are an AP exceptions assistant. Given the transaction data and a pre-computed evidence-based confidence score (which you must NOT override), return a recommended action and a one-sentence grounded reason.
+Respond ONLY with raw JSON, no markdown fences, no preamble, matching exactly this shape:
+{"recommended_action": "SHORT_UPPER_SNAKE_CASE_ACTION", "reason": "one sentence grounded in the transaction data"}`;
+      const userMsg = txContextBlock(tx) + `\n\nComputed confidence: ${(conf.score*100).toFixed(0)}%\nSuggested default action if unsure: ${defaultAction(tx)}`;
+      const raw = await callClaude(system, userMsg, 300);
+      let rec;
+      try{ rec = extractJSON(raw); }
+      catch(e){ rec = { recommended_action: defaultAction(tx), reason: tx.description }; }
+      if(!rec.recommended_action) rec.recommended_action = defaultAction(tx);
+      if(!rec.reason) rec.reason = tx.description;
+
+      tx.aiRecommendation = rec;
+      addAudit(tx, "ai", `AI recommended ${issueLabel(rec.recommended_action)} with ${Math.round(conf.score*100)}% confidence.`);
+
+      if(conf.score >= state.threshold){
+        tx.status = "RESOLVED";
+        tx.resolvedAt = new Date().toISOString();
+        addAudit(tx, "resolve", `Auto-resolved — confidence ${Math.round(conf.score*100)}% ≥ threshold ${Math.round(state.threshold*100)}%.`);
+      } else {
+        tx.status = "REVIEW";
+        addAudit(tx, "review", `Routed to human review — confidence ${Math.round(conf.score*100)}% below threshold ${Math.round(state.threshold*100)}%.`);
+      }
+      await saveState();
+      renderAll();
+    }catch(e){
+      if(e.message !== "No API key set"){
+        alert("Couldn't generate a recommendation: " + e.message);
+      }
+      resetBtn("btnRecommend");
+    }
+  }
+
+  async function resolveDecision(tx, approved){
+    if(approved){
+      tx.status = "RESOLVED";
+      tx.resolvedAt = new Date().toISOString();
+      addAudit(tx, "resolve", "Reviewer approved the AI recommendation. Status changed to Resolved.");
+    } else {
+      tx.status = "REJECTED";
+      addAudit(tx, "reject", "Reviewer rejected the AI recommendation. Status changed to Rejected — routed for manual handling.");
+    }
+    await saveState();
+    renderAll();
+  }
+
+  function renderAll(){
+    renderStats();
+    renderFilters();
+    renderQueue();
+    renderDetail();
+  }
+
+  /* ---------- Chat ---------- */
+  let chatHistory = [];
+  function updateChatContext(tx){
+    document.getElementById("chatCtx").textContent = tx ? (tx.id + " · " + tx.vendor) : "No exception selected";
+  }
+  function addChatMsg(role, text){
+    const el = document.getElementById("chatMsgs");
+    const div = document.createElement("div");
+    div.className = "msg " + role;
+    div.textContent = text;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  async function sendChat(){
+    const input = document.getElementById("chatInput");
+    const q = input.value.trim();
+    if(!q) return;
+    const tx = state.exceptions.find(t=>t.id===selectedId);
+    if(!tx){
+      addChatMsg("sys", "Select an exception first so I have something to answer from.");
+      return;
+    }
+    input.value = "";
+    addChatMsg("user", q);
+    const sendBtn = document.getElementById("chatSend");
+    sendBtn.disabled = true;
+    try{
+      const system = `You are the Exception Resolution Workbench assistant. Answer the reviewer's question about the selected exception using ONLY the transaction data, its computed confidence, and its audit trail provided below. If asked whether it can be auto-resolved, compare its confidence to the threshold explicitly. Never invent facts not present in the data. Keep answers to 2-4 sentences, plain text.`;
+      const conf = tx.confidence ? `Confidence: ${(tx.confidence.score*100).toFixed(0)}% (threshold ${(state.threshold*100).toFixed(0)}%)` : "Confidence: not yet computed for this exception.";
+      const auditText = tx.audit.map(a=> "- " + a.text).join("\n");
+      const userMsg = txContextBlock(tx) + `\nStatus: ${tx.status}\n${conf}\n\nAudit trail:\n${auditText}\n\nReviewer question: ${q}`;
+      const answer = await callClaude(system, userMsg, 300);
+      addChatMsg("ai", answer.trim());
+    }catch(e){
+      if(e.message !== "No API key set"){
+        addChatMsg("sys", "Error reaching the assistant: " + e.message);
+      } else {
+        addChatMsg("sys", "Add your Anthropic API key (top left, 🔑) to use this.");
+      }
+    }
+    sendBtn.disabled = false;
+  }
+
+  /* ---------- API key modal ---------- */
+  function refreshApiKeyStatus(){
+    const key = getApiKey();
+    document.getElementById("apiKeyStatus").textContent = key ? "Key set ✓" : "Set API key";
+  }
+  function openApiKeyModal(){
+    document.getElementById("apiKeyInput").value = getApiKey();
+    document.getElementById("apiKeyModal").style.display = "flex";
+  }
+  function closeApiKeyModal(){
+    document.getElementById("apiKeyModal").style.display = "none";
+  }
+
+  /* ---------- Wiring ---------- */
+  function init(){
+    document.getElementById("apiKeyBtn").addEventListener("click", openApiKeyModal);
+    document.getElementById("apiKeySave").addEventListener("click", ()=>{
+      const val = document.getElementById("apiKeyInput").value.trim();
+      if(val) localStorage.setItem(API_KEY_STORAGE, val);
+      refreshApiKeyStatus();
+      closeApiKeyModal();
+    });
+    document.getElementById("apiKeyClear").addEventListener("click", ()=>{
+      localStorage.removeItem(API_KEY_STORAGE);
+      document.getElementById("apiKeyInput").value = "";
+      refreshApiKeyStatus();
+    });
+    document.getElementById("apiKeyModal").addEventListener("click", (e)=>{
+      if(e.target.id === "apiKeyModal") closeApiKeyModal();
+    });
+    refreshApiKeyStatus();
+
+    document.getElementById("thresholdSlider").addEventListener("input", (e)=>{
+      const v = parseFloat(e.target.value);
+      document.getElementById("thresholdVal").textContent = Math.round(v*100) + "%";
+    });
+    document.getElementById("thresholdSlider").addEventListener("change", async (e)=>{
+      state.threshold = parseFloat(e.target.value);
+      await saveState();
+      renderAll();
+    });
+    document.getElementById("searchBox").addEventListener("input", (e)=>{
+      searchTerm = e.target.value; renderQueue();
+    });
+
+    document.getElementById("chatToggle").addEventListener("click", ()=>{
+      document.getElementById("chatPanel").classList.toggle("open");
+    });
+    document.getElementById("chatClose").addEventListener("click", ()=>{
+      document.getElementById("chatPanel").classList.remove("open");
+    });
+    document.getElementById("chatSend").addEventListener("click", sendChat);
+    document.getElementById("chatInput").addEventListener("keydown", (e)=>{
+      if(e.key === "Enter") sendChat();
+    });
+
+    loadState().then(()=>{
+      document.getElementById("thresholdSlider").value = state.threshold;
+      document.getElementById("thresholdVal").textContent = Math.round(state.threshold*100) + "%";
+      renderAll();
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
