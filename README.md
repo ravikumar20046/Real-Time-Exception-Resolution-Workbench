@@ -4,11 +4,7 @@ A human-in-command AI workbench for reviewing and resolving flagged AP (accounts
 
 ---
 
-## 1. How to present this to a recruiter
-
-Don't say: *"I built an AI chatbot for transactions."*
-
-Say:
+## 1. Introduction of the project
 
 > **"I built a human-in-the-loop AI exception resolution workbench that lets a reviewer investigate flagged transactions, get source-grounded explanations and resolution recommendations, and safely auto-resolve high-confidence cases while escalating uncertain ones to a human — with every decision logged to an audit trail."**
 
